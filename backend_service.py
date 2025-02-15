@@ -14,7 +14,7 @@ from gtts import gTTS
 import logging
 
 # Initialize FastAPI app
-app = FastAPI(title="Vision Assist Backend")
+app = FastAPI(title="Voxel Backend")
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -108,5 +108,5 @@ async def analyze_image(request: ImageAnalysisRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    logger.info("Starting Vision Assist Backend...")
+    logger.info("Starting Voxel Backend...")
     uvicorn.run(app, host="0.0.0.0", port=8000) 
