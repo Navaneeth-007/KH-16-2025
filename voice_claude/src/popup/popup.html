@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <link rel="stylesheet" href="popup.css">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <img src="../assets/icon48.png" alt="Voxel Logo" class="logo">
+      <h1>Voxel AI Assistant</h1>
+    </div>
+
+    <div class="section api-key-section">
+      <h2>API Key Setup</h2>
+      <div class="input-group">
+        <input type="password" 
+               id="apiKey" 
+               class="api-key-input" 
+               placeholder="Enter OpenAI API Key">
+        <button id="saveKey" class="primary-button">Save Key</button>
+      </div>
+    </div>
+
+    <div class="section controls">
+      <div class="toggle-container">
+        <label class="toggle-label">Enable Extension
+          <div class="toggle">
+            <input type="checkbox" id="extensionToggle">
+            <span class="slider"></span>
+          </div>
+        </label>
+      </div>
+      
+      <button id="toggleButton" class="voice-button" data-enabled="false">
+        <span class="button-icon">🎤</span>
+        <span class="button-text">Enable Voice Assistant</span>
+      </button>
+    </div>
+
+    <div id="status" class="status"></div>
+
+    <div class="section commands">
+      <h2>Voice Commands</h2>
+      <div class="command-list">
+        <div class="command-item">
+          <span class="command-trigger">"Hey Voxel, read out the contents"</span>
+          <span class="command-desc">Reads the page content</span>
+        </div>
+        <div class="command-item">
+          <span class="command-trigger">"Hey Voxel, describe images"</span>
+          <span class="command-desc">Describes visible images</span>
+        </div>
+        <div class="command-item">
+          <span class="command-trigger">"Hey Voxel, summarize this page"</span>
+          <span class="command-desc">Provides page summary</span>
+        </div>
+        <div class="command-item">
+          <span class="command-trigger">"Hey Voxel, [your question]"</span>
+          <span class="command-desc">Ask anything about the page</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="../utils/storage.js"></script>
+  <script src="../utils/api.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
