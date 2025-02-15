@@ -208,31 +208,106 @@ class VisionAssistant {
 
     async analyzeImage(imageElement) {
         try {
-            let description = [];
-            
-            // Get alt text
-            if (imageElement.alt) {
-                description.push(`Image alt text: ${imageElement.alt}`);
+            // Get image data
+            const canvas = document.createElement('canvas');
+            canvas.width = imageElement.naturalWidth;
+            canvas.height = imageElement.naturalHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(imageElement, 0, 0);
+            const imageData = canvas.toDataURL('image/jpeg');
+
+            // Send to backend for YOLO analysis
+            const response = await fetch('http://localhost:8000/analyze_image', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    image_data: imageData
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to analyze image');
             }
+
+            const result = await response.json();
             
-            // Get dimensions
-            description.push(`Image dimensions: ${imageElement.naturalWidth} by ${imageElement.naturalHeight} pixels`);
-            
-            // Get surrounding context
-            const surroundingText = this.getImageContext(imageElement);
-            if (surroundingText) {
-                description.push(`Context: ${surroundingText}`);
+            // Play audio description if available
+            if (result.audio_base64) {
+                const audio = new Audio(`data:audio/mp3;base64,${result.audio_base64}`);
+                await audio.play();
             }
-            
+
+            // Add visual indicators for detected objects
+            this.highlightDetectedObjects(imageElement, result.objects);
+
             // Add ARIA label
-            const finalDescription = description.join('. ');
-            imageElement.setAttribute('aria-label', finalDescription);
+            imageElement.setAttribute('aria-label', result.description);
             
-            return finalDescription;
+            return result.description;
         } catch (error) {
             console.error('Error analyzing image:', error);
             return 'Unable to analyze image';
         }
+    }
+
+    highlightDetectedObjects(imageElement, objects) {
+        // Remove any existing highlights
+        const existingHighlights = document.querySelectorAll('.yolo-detection-box');
+        existingHighlights.forEach(el => el.remove());
+
+        // Get image position and dimensions
+        const rect = imageElement.getBoundingClientRect();
+        const scaleX = imageElement.naturalWidth / rect.width;
+        const scaleY = imageElement.naturalHeight / rect.height;
+
+        // Create container for highlights
+        const container = document.createElement('div');
+        container.style.position = 'absolute';
+        container.style.left = rect.left + 'px';
+        container.style.top = rect.top + 'px';
+        container.style.width = rect.width + 'px';
+        container.style.height = rect.height + 'px';
+        container.style.pointerEvents = 'none';
+
+        // Add highlight boxes for each detected object
+        objects.forEach(obj => {
+            const [x1, y1, x2, y2] = obj.bbox;
+            const box = document.createElement('div');
+            box.className = 'yolo-detection-box';
+            box.style.position = 'absolute';
+            box.style.left = (x1 / scaleX) + 'px';
+            box.style.top = (y1 / scaleY) + 'px';
+            box.style.width = ((x2 - x1) / scaleX) + 'px';
+            box.style.height = ((y2 - y1) / scaleY) + 'px';
+            box.style.border = '2px solid #4CAF50';
+            box.style.backgroundColor = 'rgba(76, 175, 80, 0.1)';
+            box.style.pointerEvents = 'none';
+
+            // Add label
+            const label = document.createElement('div');
+            label.className = 'yolo-detection-label';
+            label.textContent = `${obj.class} (${Math.round(obj.confidence * 100)}%)`;
+            label.style.position = 'absolute';
+            label.style.top = '-20px';
+            label.style.left = '0';
+            label.style.backgroundColor = '#4CAF50';
+            label.style.color = 'white';
+            label.style.padding = '2px 4px';
+            label.style.borderRadius = '2px';
+            label.style.fontSize = '12px';
+
+            box.appendChild(label);
+            container.appendChild(box);
+        });
+
+        document.body.appendChild(container);
+
+        // Remove highlights after 5 seconds
+        setTimeout(() => {
+            container.remove();
+        }, 5000);
     }
 
     getImageContext(imageElement) {
