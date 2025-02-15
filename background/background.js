@@ -10,23 +10,37 @@ chrome.runtime.onInstalled.addListener((details) => {
     }
 });
 
+// Keep track of tabs where content script is injected
+const injectedTabs = new Set();
+
 // Inject content script when needed
 async function injectContentScript(tabId) {
     try {
+        if (injectedTabs.has(tabId)) {
+            return true;
+        }
+
         await chrome.scripting.executeScript({
             target: { tabId: tabId },
-            files: ['src/content/content.js']
+            files: ['content/content.js']
         });
         await chrome.scripting.insertCSS({
             target: { tabId: tabId },
-            files: ['src/content/content.css']
+            files: ['content/content.css']
         });
+
+        injectedTabs.add(tabId);
         return true;
     } catch (error) {
         console.error('Error injecting content script:', error);
         return false;
     }
 }
+
+// Clean up when tab is closed
+chrome.tabs.onRemoved.addListener((tabId) => {
+    injectedTabs.delete(tabId);
+});
 
 // Handle messages from popup and content scripts
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -62,7 +76,8 @@ chrome.commands.onCommand.addListener(async (command) => {
     if (!tab) return;
 
     // Ensure content script is injected before sending command
-    await injectContentScript(tab.id);
+    const success = await injectContentScript(tab.id);
+    if (!success) return;
     
     switch (command) {
         case 'start-reading':
