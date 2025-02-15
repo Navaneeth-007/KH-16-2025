@@ -1,13 +1,13 @@
 // Global instance
-let voxelAssistant = null;
+let visionAssistant = null;
 
-class VoxelAssistant {
+class VisionAssistant {
     constructor() {
         try {
-            console.log('Initializing Voxel Assistant...');
+            console.log('Initializing Vision Assistant...');
             
-            // Backend API URL
-            this.apiUrl = 'http://localhost:8000';
+            // Initialize speech synthesis
+            this.speech = window.speechSynthesis;
             this.currentUtterance = null;
             this.isReading = false;
             this.currentNode = null;
@@ -19,24 +19,36 @@ class VoxelAssistant {
             this.setupVoiceRecognition();
             this.setupImageClickHandlers();
             this.setupKeyboardShortcuts();
+            this.loadVoices();
             
-            console.log('Voxel Assistant initialized successfully');
+            console.log('Vision Assistant initialized successfully');
             
             // Notify background script of successful initialization
             chrome.runtime.sendMessage({ type: 'contentScriptLoaded' });
             
             // Announce extension is ready after a short delay
             setTimeout(() => {
-                this.speak("Voxel AI Assistant is ready. Say 'help' for available commands.");
+                this.speak("Vision assist is ready. Say 'help' for available commands.");
             }, 1000);
         } catch (error) {
-            console.error('Error initializing Voxel Assistant:', error);
+            console.error('Error initializing Vision Assistant:', error);
             throw error;
+        }
+    }
+
+    loadVoices() {
+        // Load available voices
+        this.voices = this.speech.getVoices();
+        if (this.speech.onvoiceschanged !== undefined) {
+            this.speech.onvoiceschanged = () => {
+                this.voices = this.speech.getVoices();
+            };
         }
     }
 
     setupKeyboardShortcuts() {
         document.addEventListener('keydown', (event) => {
+            // Alt + R to start/stop reading
             if (event.altKey && event.key === 'r') {
                 if (this.isReading) {
                     this.pauseReading();
@@ -44,6 +56,7 @@ class VoxelAssistant {
                     this.startReading();
                 }
             }
+            // Alt + L to start/stop listening
             if (event.altKey && event.key === 'l') {
                 if (this.isListening) {
                     this.stopListening();
@@ -51,6 +64,7 @@ class VoxelAssistant {
                     this.startListening();
                 }
             }
+            // Alt + H for help
             if (event.altKey && event.key === 'h') {
                 this.announceHelp();
             }
@@ -113,92 +127,108 @@ class VoxelAssistant {
         }
     }
 
-    async speak(text, rate = 1) {
-        try {
-            const response = await fetch(`${this.apiUrl}/text_to_speech`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    text: text,
-                    language_code: 'en-US',
-                    voice_name: 'en-US-Standard-C'
-                })
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to convert text to speech');
-            }
-
-            const data = await response.json();
-            const audio = new Audio(`data:audio/mp3;base64,${data.audio_base64}`);
-            
-            if (this.currentUtterance) {
-                this.currentUtterance.pause();
-            }
-            
-            this.currentUtterance = audio;
-            audio.playbackRate = rate;
-            await audio.play();
-
-            return new Promise((resolve) => {
-                audio.onended = resolve;
-            });
-        } catch (error) {
-            console.error('Error in speak:', error);
-            // Fallback to browser's TTS if API fails
-            if (this.currentUtterance) {
-                speechSynthesis.cancel();
-            }
-            this.currentUtterance = new SpeechSynthesisUtterance(text);
-            this.currentUtterance.rate = rate;
-            speechSynthesis.speak(this.currentUtterance);
+    startListening() {
+        if (!this.isListening && this.recognition) {
+            this.should_stop = false;
+            this.recognition.start();
         }
+    }
+
+    stopListening() {
+        if (this.isListening && this.recognition) {
+            this.should_stop = true;
+            this.recognition.stop();
+            this.speak("Voice recognition stopped");
+        }
+    }
+
+    announceHelp() {
+        const helpText = `
+            Available commands:
+            'Read page' - Start reading the page
+            'Stop' or 'Pause' - Stop reading
+            'Describe images' - Describe all images on the page
+            'Help' - List available commands
+            
+            Keyboard shortcuts:
+            Alt + R - Start/Stop reading
+            Alt + L - Start/Stop voice recognition
+            Alt + H - Show help
+            
+            You can also click on any image to hear its description.
+        `;
+        this.speak(helpText);
+    }
+
+    handleVoiceCommand(command) {
+        console.log('Processing command:', command);
+        if (command.includes('read page')) {
+            this.startReading();
+        } else if (command.includes('stop') || command.includes('pause')) {
+            this.pauseReading();
+        } else if (command.includes('describe images')) {
+            this.describeImages();
+        } else if (command.includes('help')) {
+            this.announceHelp();
+        }
+    }
+
+    setupImageClickHandlers() {
+        document.addEventListener('click', async (event) => {
+            if (event.target.tagName === 'IMG') {
+                const description = await this.analyzeImage(event.target);
+                this.speak(description);
+            }
+        });
+    }
+
+    speak(text, rate = 1) {
+        if (this.currentUtterance) {
+            this.speech.cancel();
+        }
+
+        this.currentUtterance = new SpeechSynthesisUtterance(text);
+        this.currentUtterance.rate = rate;
+        
+        // Use a good voice if available
+        if (this.voices && this.voices.length > 0) {
+            // Prefer English voices
+            const englishVoices = this.voices.filter(voice => voice.lang.startsWith('en-'));
+            if (englishVoices.length > 0) {
+                this.currentUtterance.voice = englishVoices[0];
+            }
+        }
+
+        this.currentUtterance.onend = () => {
+            this.currentUtterance = null;
+        };
+
+        this.speech.speak(this.currentUtterance);
     }
 
     async analyzeImage(imageElement) {
         try {
-            // Create a canvas to convert image to base64
-            const canvas = document.createElement('canvas');
-            canvas.width = imageElement.naturalWidth;
-            canvas.height = imageElement.naturalHeight;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(imageElement, 0, 0);
-            const imageData = canvas.toDataURL('image/jpeg');
-
-            // Get surrounding context
-            const context_text = this.getImageContext(imageElement);
-
-            // Send to backend for analysis
-            const response = await fetch(`${this.apiUrl}/analyze_image`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    image_data: imageData,
-                    context_text: context_text
-                })
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to analyze image');
+            let description = [];
+            
+            // Get alt text
+            if (imageElement.alt) {
+                description.push(`Image alt text: ${imageElement.alt}`);
             }
-
-            const result = await response.json();
             
-            // Play the audio description
-            const audio = new Audio(`data:audio/mp3;base64,${result.audio_base64}`);
-            await audio.play();
-
-            // Cache the description
-            this.imageDescriptions.set(imageElement, result.description);
+            // Get dimensions
+            description.push(`Image dimensions: ${imageElement.naturalWidth} by ${imageElement.naturalHeight} pixels`);
             
-            // Add ARIA attributes
-            imageElement.setAttribute('aria-label', result.description);
+            // Get surrounding context
+            const surroundingText = this.getImageContext(imageElement);
+            if (surroundingText) {
+                description.push(`Context: ${surroundingText}`);
+            }
             
-            return result.description;
+            // Add ARIA label
+            const finalDescription = description.join('. ');
+            imageElement.setAttribute('aria-label', finalDescription);
+            
+            return finalDescription;
         } catch (error) {
             console.error('Error analyzing image:', error);
             return 'Unable to analyze image';
@@ -217,56 +247,26 @@ class VoxelAssistant {
             .trim();
     }
 
-    setupImageClickHandlers() {
-        document.addEventListener('click', async (event) => {
-            if (event.target.tagName === 'IMG') {
-                const description = await this.analyzeImage(event.target);
-                await this.speak(description);
-            }
-        });
-    }
-
     async describeImages() {
         const images = document.querySelectorAll('img');
-        await this.speak(`Found ${images.length} images on the page.`);
+        this.speak(`Found ${images.length} images on the page.`);
         
         for (const image of images) {
             if (this.isReading) {
                 const description = await this.analyzeImage(image);
-                await this.speak(description);
+                this.speak(description);
+                
+                // Wait for current description to finish
+                await new Promise(resolve => {
+                    const checkInterval = setInterval(() => {
+                        if (!this.currentUtterance) {
+                            clearInterval(checkInterval);
+                            resolve();
+                        }
+                    }, 100);
+                });
             }
         }
-    }
-
-    handleVoiceCommand(command) {
-        console.log('Processing command:', command);
-        if (command.includes('read page')) {
-            this.startReading();
-        } else if (command.includes('stop') || command.includes('pause')) {
-            this.pauseReading();
-        } else if (command.includes('describe images')) {
-            this.describeImages();
-        } else if (command.includes('help')) {
-            this.announceHelp();
-        }
-    }
-
-    announceHelp() {
-        const helpText = `
-            Available commands:
-            'Read page' - Start reading the page
-            'Stop' or 'Pause' - Stop reading
-            'Describe images' - Describe all images on the page using AI
-            'Help' - List available commands
-            
-            Keyboard shortcuts:
-            Alt + R - Start/Stop reading
-            Alt + L - Start/Stop voice recognition
-            Alt + H - Show help
-            
-            You can also click on any image to hear its AI-generated description.
-        `;
-        this.speak(helpText);
     }
 
     getReadableNodes() {
@@ -292,7 +292,7 @@ class VoxelAssistant {
         return nodes;
     }
 
-    async startReading(settings = {}) {
+    startReading(settings = {}) {
         if (this.isReading) return;
         
         this.isReading = true;
@@ -302,100 +302,115 @@ class VoxelAssistant {
             this.currentNode = nodes[0];
         }
 
-        await this.readNode(this.currentNode, settings);
+        this.readNode(this.currentNode, settings);
     }
 
-    async readNode(node, settings) {
+    readNode(node, settings) {
         if (!node || !this.isReading) return;
 
         // Remove previous highlight
-        document.querySelectorAll('.voxel-reading').forEach(el => {
-            el.classList.remove('voxel-reading');
+        document.querySelectorAll('.vision-assist-reading').forEach(el => {
+            el.classList.remove('vision-assist-reading');
         });
 
         // Add highlight to current node
-        node.parentElement.classList.add('voxel-reading');
+        node.parentElement.classList.add('vision-assist-reading');
 
         const text = node.textContent.trim();
-        await this.speak(text, settings.rate || 1);
+        this.speak(text, settings.rate || 1);
 
-        // Move to next node
-        if (this.isReading) {
-            const nodes = this.getReadableNodes();
-            const currentIndex = nodes.indexOf(node);
-            if (currentIndex < nodes.length - 1) {
-                this.currentNode = nodes[currentIndex + 1];
-                await this.readNode(this.currentNode, settings);
-            } else {
-                this.isReading = false;
-                this.currentNode = null;
-                document.querySelectorAll('.voxel-reading').forEach(el => {
-                    el.classList.remove('voxel-reading');
-                });
-                await this.speak('Finished reading page');
+        // Set up next node
+        this.currentUtterance.onend = () => {
+            if (this.isReading) {
+                const nodes = this.getReadableNodes();
+                const currentIndex = nodes.indexOf(node);
+                if (currentIndex < nodes.length - 1) {
+                    this.currentNode = nodes[currentIndex + 1];
+                    this.readNode(this.currentNode, settings);
+                } else {
+                    this.isReading = false;
+                    this.currentNode = null;
+                    document.querySelectorAll('.vision-assist-reading').forEach(el => {
+                        el.classList.remove('vision-assist-reading');
+                    });
+                    this.speak('Finished reading page');
+                }
             }
-        }
+        };
     }
 
-    async pauseReading() {
+    pauseReading() {
         this.isReading = false;
         if (this.currentUtterance) {
-            if (this.currentUtterance instanceof Audio) {
-                this.currentUtterance.pause();
-            } else {
-                speechSynthesis.cancel();
-            }
+            this.speech.cancel();
         }
-        document.querySelectorAll('.voxel-reading').forEach(el => {
-            el.classList.remove('voxel-reading');
+        document.querySelectorAll('.vision-assist-reading').forEach(el => {
+            el.classList.remove('vision-assist-reading');
         });
-        await this.speak('Reading paused');
+        this.speak('Reading paused');
     }
 }
 
 // Initialize the assistant when the page is ready
 function initializeAssistant() {
     try {
-        if (!voxelAssistant) {
-            console.log('Creating new Voxel Assistant instance...');
-            voxelAssistant = new VoxelAssistant();
+        if (!visionAssistant) {
+            console.log('Creating new Vision Assistant instance...');
+            visionAssistant = new VisionAssistant();
         }
     } catch (error) {
-        console.error('Failed to initialize Voxel Assistant:', error);
+        console.error('Failed to initialize Vision Assistant:', error);
     }
 }
 
-// Handle messages from popup/background
+// Handle messages before initialization
+function handlePreInitMessage(message) {
+    if (message.type === 'ping') {
+        return true; // Respond to ping
+    }
+    return false;
+}
+
+// Listen for messages from popup/background
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log('Received message:', message);
     
     try {
-        if (!voxelAssistant) {
+        // Handle ping messages even before initialization
+        if (handlePreInitMessage(message)) {
+            sendResponse({ status: 'ok' });
+            return;
+        }
+
+        // Initialize if not already done
+        if (!visionAssistant) {
             initializeAssistant();
         }
 
-        if (!voxelAssistant) {
-            throw new Error('Voxel Assistant not initialized');
+        // Ensure initialization was successful
+        if (!visionAssistant) {
+            throw new Error('Vision Assistant not initialized');
         }
 
+        // Handle the message
         switch (message.action) {
             case 'startReading':
-                voxelAssistant.startReading(message.settings);
+                visionAssistant.startReading(message.settings);
                 break;
             case 'pauseReading':
-                voxelAssistant.pauseReading();
+                visionAssistant.pauseReading();
                 break;
             case 'describeImages':
-                voxelAssistant.describeImages();
+                visionAssistant.describeImages();
                 break;
             case 'startListening':
-                voxelAssistant.startListening();
+                visionAssistant.startListening();
                 break;
             case 'stopListening':
-                voxelAssistant.stopListening();
+                visionAssistant.stopListening();
                 break;
             case 'help':
-                voxelAssistant.announceHelp();
+                visionAssistant.announceHelp();
                 break;
         }
         
@@ -405,7 +420,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ status: 'error', error: error.message });
     }
     
-    return true;
+    return true; // Keep the message channel open for async response
 });
 
 // Initialize when the page is fully loaded
@@ -417,7 +432,7 @@ if (document.readyState === 'complete') {
 
 // Backup initialization for dynamic page loads
 window.addEventListener('load', () => {
-    if (!voxelAssistant) {
+    if (!visionAssistant) {
         initializeAssistant();
     }
 }); 

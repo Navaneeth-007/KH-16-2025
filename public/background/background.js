@@ -1,11 +1,11 @@
 // Background service worker
 self.addEventListener('install', (event) => {
-    console.log('Voxel extension installed');
+    console.log('Vision Assist extension installed');
     self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
-    console.log('Voxel extension activated');
+    console.log('Vision Assist extension activated');
     event.waitUntil(clients.claim());
 });
 

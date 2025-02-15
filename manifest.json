@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Voxel",
+  "name": "Vision Assist",
   "version": "1.0",
   "description": "An AI-powered assistant for visually impaired users to understand web content",
   "permissions": [
