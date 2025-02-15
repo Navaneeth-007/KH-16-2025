@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let isReading = false;
 
-    // Initializing voice options
+    // Initialize voice options
     function loadVoices() {
         const voices = window.speechSynthesis.getVoices();
         voiceSelect.innerHTML = '';
@@ -21,12 +21,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Load voices(when ready)
+    // Load voices when they're ready
     if (window.speechSynthesis.onvoiceschanged !== undefined) {
         window.speechSynthesis.onvoiceschanged = loadVoices;
     }
 
-    // Updating speech rate
+    // Update speech rate display
     speechRateInput.addEventListener('input', (e) => {
         rateValue.textContent = `${e.target.value}x`;
     });
