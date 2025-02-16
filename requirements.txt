@@ -1,0 +1,30 @@
+# Web Framework
+fastapi==0.104.1
+uvicorn==0.24.0
+python-multipart==0.0.6
+pydantic==2.5.2
+starlette==0.27.0
+
+# AI and Computer Vision
+ultralytics==8.0.196
+torch==2.1.1
+torchvision==0.16.1
+numpy==1.26.2
+opencv-python==4.8.1.78
+Pillow==10.1.0
+
+# Utilities
+python-dotenv==1.0.0
+requests==2.31.0
+typing-extensions==4.8.0
+packaging==23.2
+
+# Development Tools
+black==23.11.0
+isort==5.12.0
+pytest==7.4.3
+pytest-asyncio==0.21.1
+
+# Optional - for Jupyter Notebook development
+jupyter==1.0.0
+ipython==8.17.2 
